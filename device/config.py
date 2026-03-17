@@ -90,6 +90,28 @@ class Settings(BaseSettings):
             return str(local)
         return None
 
+    def log_audio_devices(self) -> None:
+        """Log all audio devices at startup for debugging."""
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            default_in = sd.default.device[0]
+            print(f"\n{'='*60}")
+            print("AUDIO DEVICES")
+            print(f"{'='*60}")
+            for i, dev in enumerate(devices):
+                marker = ""
+                if i == default_in:
+                    marker = " [DEFAULT INPUT]"
+                if dev["max_input_channels"] > 0:
+                    print(f"  [{i}] {dev['name']} "
+                          f"(in:{dev['max_input_channels']} out:{dev['max_output_channels']} "
+                          f"@ {dev['default_samplerate']:.0f}Hz){marker}")
+            print(f"{'='*60}\n")
+        except Exception as e:
+            print(f"Could not list audio devices: {e}")
+
 
 settings = Settings()
 settings.resolve_paths()
+settings.log_audio_devices()

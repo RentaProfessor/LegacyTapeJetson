@@ -19,12 +19,12 @@ export default function App() {
   const [chapter, setChapter] = useState(null);
   const [story, setStory] = useState(null);
   const [transcript, setTranscript] = useState(null);
-  const [tapePos, setTapePos] = useState(0.15);
+  const [tapePos, setTapePos] = useState(0);
   const [connected, setConnected] = useState(false);
   const ws = useRef(null);
   const timerRef = useRef(null);
   const tapeTimer = useRef(null);
-  const tapePosRef = useRef(0.15);
+  const tapePosRef = useRef(0);
 
   const state =
     deviceState === "recording" || deviceState === "transcribing" || deviceState === "paused"
@@ -54,6 +54,7 @@ export default function App() {
         if (d.type === "state") {
           setDeviceState(d.state);
           if (d.state === "idle") setTransport("idle");
+          if (d.state === "playback") setTransport("playback");
           if (d.mode) setMode(d.mode);
           if (d.story !== undefined) setStory(d.story);
           if (d.chapter !== undefined) setChapter(d.chapter);
@@ -62,6 +63,14 @@ export default function App() {
           setMode(d.mode);
         } else if (d.type === "new_chapter") {
           setChapter(d.chapter);
+        } else if (d.type === "playback_progress") {
+          if (d.progress !== undefined) {
+            tapePosRef.current = d.progress;
+            setTapePos(d.progress);
+          }
+          if (d.position !== undefined) {
+            setElapsed(Math.floor(d.position));
+          }
         }
       };
       sock.onerror = () => {};
@@ -140,12 +149,10 @@ export default function App() {
 
   const handleStop = () => {
     if (state === "idle") return;
-    setTransport("idle");
-    if (deviceState === "recording" || deviceState === "paused" || deviceState === "transcribing") {
-      if (!sendAction("stop")) {
-        setDeviceState("idle");
-      }
+    if (!sendAction("stop")) {
+      setDeviceState("idle");
     }
+    setTransport("idle");
   };
 
   const handlePause = () => {
@@ -193,8 +200,8 @@ export default function App() {
       setStory(null);
       setChapter(null);
       chapterNum.current = 1;
-      tapePosRef.current = 0.15;
-      setTapePos(0.15);
+      tapePosRef.current = 0;
+      setTapePos(0);
     }
   };
 

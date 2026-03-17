@@ -190,7 +190,7 @@ function TapePath({ leftR, rightR, headY, isActive }) {
 
 export default function CassetteWindow({ state, chapter, mode, tapeProgress }) {
   const c = COLORS[mode] || COLORS.clean;
-  const p = Math.max(0.02, Math.min(0.98, tapeProgress || 0.15));
+  const p = Math.max(0.02, Math.min(0.98, tapeProgress || 0.02));
 
   const leftR = reelRadius(1 - p);
   const rightR = reelRadius(p);

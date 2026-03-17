@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from config import settings
-from recorder import recorder
+from recorder import recorder, list_audio_devices
 from transcriber import transcribe, warmup as warmup_whisper
 from memoir_engine import process_transcript, generate_chapter_title, generate_follow_up_questions
 from pico_bridge import on_button, start_pico_listener, send_state
@@ -32,6 +32,7 @@ current_story: Optional[Dict] = None
 current_chapter: Optional[Dict] = None
 current_mode: str = settings.default_mode
 ws_clients: Set[WebSocket] = set()
+_playback_monitor_task: Optional[asyncio.Task] = None
 
 
 async def broadcast(event: dict) -> None:
@@ -46,6 +47,30 @@ async def broadcast(event: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Playback progress monitor
+# ---------------------------------------------------------------------------
+
+async def _monitor_playback() -> None:
+    """Poll recorder.is_playing and broadcast progress to the UI."""
+    try:
+        while recorder.is_playing:
+            progress = 0.0
+            if recorder.play_duration > 0:
+                progress = recorder.play_position / recorder.play_duration
+            await broadcast({
+                "type": "playback_progress",
+                "position": round(recorder.play_position, 1),
+                "duration": round(recorder.play_duration, 1),
+                "progress": round(min(progress, 1.0), 3),
+            })
+            await asyncio.sleep(0.25)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await broadcast({"type": "state", "state": "idle"})
+
+
+# ---------------------------------------------------------------------------
 # Button handlers
 # ---------------------------------------------------------------------------
 
@@ -55,6 +80,9 @@ async def handle_record() -> None:
     if recorder.is_recording:
         logger.info("Already recording")
         return
+
+    if recorder.is_playing:
+        recorder.stop_playback()
 
     if current_story is None:
         current_story = storage.create_story(mode=current_mode)
@@ -78,7 +106,15 @@ async def handle_record() -> None:
 
 
 async def handle_stop() -> None:
-    global current_chapter
+    global current_chapter, _playback_monitor_task
+
+    if recorder.is_playing:
+        recorder.stop_playback()
+        if _playback_monitor_task:
+            _playback_monitor_task.cancel()
+            _playback_monitor_task = None
+        await broadcast({"type": "state", "state": "idle"})
+        return
 
     if not recorder.is_recording:
         return
@@ -134,7 +170,28 @@ async def handle_pause() -> None:
 
 
 async def handle_play() -> None:
-    await broadcast({"type": "state", "state": "playback"})
+    global _playback_monitor_task
+
+    if recorder.is_recording or recorder.is_playing:
+        return
+
+    if not recorder.last_recording_path:
+        logger.warning("No recording to play")
+        return
+
+    loop = asyncio.get_event_loop()
+
+    def on_done():
+        loop.call_soon_threadsafe(
+            lambda: asyncio.ensure_future(broadcast({"type": "state", "state": "idle"}))
+        )
+
+    started = recorder.play(on_done=on_done)
+    if started:
+        await broadcast({"type": "state", "state": "playback"})
+        _playback_monitor_task = asyncio.create_task(_monitor_playback())
+    else:
+        logger.warning("Playback failed to start")
 
 
 async def handle_rewind() -> None:
@@ -177,6 +234,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name}")
     logger.info(f"Data dir: {settings.data_dir}")
 
+    recorder.resolve_input_device()
     warmup_whisper()
 
     on_button("record", handle_record)
@@ -194,6 +252,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    recorder.stop_playback()
     logger.info("Shutting down")
 
 
@@ -216,9 +275,15 @@ async def websocket_endpoint(ws: WebSocket):
     ws_clients.add(ws)
     logger.info(f"UI connected ({len(ws_clients)} clients)")
 
+    current_state = "idle"
+    if recorder.is_recording:
+        current_state = "recording"
+    elif recorder.is_playing:
+        current_state = "playback"
+
     await ws.send_json({
         "type": "state",
-        "state": "recording" if recorder.is_recording else "idle",
+        "state": current_state,
         "mode": current_mode,
         "story": current_story,
         "chapter": current_chapter,
@@ -260,9 +325,15 @@ async def health():
     return {
         "status": "ok",
         "recording": recorder.is_recording,
+        "playing": recorder.is_playing,
         "mode": current_mode,
         "story": current_story,
     }
+
+
+@app.get("/api/devices")
+async def get_devices():
+    return {"devices": list_audio_devices()}
 
 
 @app.get("/api/stories")
@@ -303,6 +374,12 @@ async def stop_recording():
 async def pause_recording():
     await handle_pause()
     return {"status": "paused" if recorder.is_paused else "recording"}
+
+
+@app.post("/api/play")
+async def play_recording():
+    await handle_play()
+    return {"status": "playing" if recorder.is_playing else "idle"}
 
 
 @app.post("/api/mode/{mode}")

@@ -300,6 +300,9 @@ class Recorder:
 
         self._on_playback_done = on_done
         self._play_stop_flag.clear()
+        self._playing = True
+        self._play_position = 0.0
+        self._play_duration = 0.0
         self._play_thread = threading.Thread(target=self._play_worker, args=(target,), daemon=True)
         self._play_thread.start()
         return True
@@ -309,7 +312,6 @@ class Recorder:
             data, samplerate = sf.read(filepath, dtype="float32")
             self._play_duration = len(data) / samplerate
             self._play_position = 0.0
-            self._playing = True
 
             out_dev = self._output_device
             out_name = "system default"

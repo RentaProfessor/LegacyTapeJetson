@@ -57,6 +57,8 @@ function ConnectionDot({ connected }) {
   );
 }
 
+const APP_VERSION = "v0.4";
+
 export default function StatusBar({ state, mode, elapsed, connected }) {
   const isRecording = state === "recording";
   const isActive = ["recording", "playback", "paused", "rewinding", "ffwd"].includes(state);
@@ -127,6 +129,7 @@ export default function StatusBar({ state, mode, elapsed, connected }) {
         <TapeCounter elapsed={elapsed} />
         <ConnectionDot connected={connected} />
         <BatteryIcon />
+        <span className="version-label">{APP_VERSION}</span>
       </div>
     </div>
   );

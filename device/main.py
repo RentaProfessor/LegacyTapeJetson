@@ -45,7 +45,7 @@ async def broadcast(event: dict) -> None:
             await ws.send_json(event)
         except Exception:
             dead.add(ws)
-    ws_clients -= dead
+    ws_clients.difference_update(dead)
 
 
 # ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ function ConnectionDot({ connected }) {
   );
 }
 
-const APP_VERSION = "v1.06";
+const APP_VERSION = "v1.07";
 
 export default function StatusBar({ state, mode, elapsed, connected }) {
   const isRecording = state === "recording";

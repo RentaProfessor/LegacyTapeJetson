@@ -229,66 +229,61 @@ function TapePath({ leftR, rightR, headY, isActive, direction }) {
 
   return (
     <g>
-      {/* Tape shadow */}
-      <path d={fullPath} fill="none" stroke="rgba(80,40,10,0.35)" strokeWidth="8" strokeLinecap="round" />
+      {/* Drop shadow under the tape */}
+      <path d={fullPath} fill="none" stroke="rgba(0,0,0,0.3)" strokeWidth="7" strokeLinecap="round" />
 
-      {/* Base tape */}
-      <path d={fullPath} fill="none" stroke="#6a3a15" strokeWidth="5" strokeLinecap="round" />
+      {/* Dark underside edge */}
+      <path d={fullPath} fill="none" stroke="#3a1a08" strokeWidth="5.5" strokeLinecap="round" />
 
-      {/* Glossy tape surface */}
-      <path d={fullPath} fill="none" stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
+      {/* Main tape body — solid brown ribbon */}
+      <path d={fullPath} fill="none" stroke="#7a4420" strokeWidth="4.5" strokeLinecap="round" />
 
-      {/* Top highlight edge */}
-      <path d={fullPath} fill="none" stroke="rgba(210,150,90,0.25)" strokeWidth="1.5" strokeLinecap="round" />
+      {/* Matte coating layer */}
+      <path d={fullPath} fill="none" stroke="#8a5228" strokeWidth="3.5" strokeLinecap="round" />
 
-      {/* Animated texture lines — visible grain moving along the tape */}
+      {/* Top surface — slight sheen */}
+      <path d={fullPath} fill="none" stroke="rgba(160,100,50,0.6)" strokeWidth="2.5" strokeLinecap="round" />
+
+      {/* Upper highlight edge — thin bright line on top of ribbon */}
+      <path d={fullPath} fill="none" stroke="rgba(200,150,90,0.3)" strokeWidth="1" strokeLinecap="round" />
+
+      {/* Moving shimmer — light reflections traveling along the tape surface */}
       {isActive && (
         <>
           <motion.path
             d={fullPath}
             fill="none"
-            stroke="rgba(180,120,60,0.3)"
-            strokeWidth="3.5"
-            strokeDasharray="2 8"
+            stroke="rgba(220,170,100,0.35)"
+            strokeWidth="2.5"
+            strokeDasharray="20 80"
             strokeLinecap="round"
             initial={{ strokeDashoffset: 0 }}
-            animate={{ strokeDashoffset: direction >= 0 ? -200 : 200 }}
-            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+            animate={{ strokeDashoffset: direction >= 0 ? -500 : 500 }}
+            transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
           />
           <motion.path
             d={fullPath}
             fill="none"
-            stroke="rgba(255,200,130,0.12)"
-            strokeWidth="2"
-            strokeDasharray="4 16"
+            stroke="rgba(255,210,140,0.2)"
+            strokeWidth="1.5"
+            strokeDasharray="12 120"
             strokeLinecap="round"
-            initial={{ strokeDashoffset: 5 }}
-            animate={{ strokeDashoffset: direction >= 0 ? -195 : 205 }}
-            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-          />
-          <motion.path
-            d={fullPath}
-            fill="none"
-            stroke="rgba(60,30,10,0.25)"
-            strokeWidth="4"
-            strokeDasharray="1 12"
-            strokeLinecap="round"
-            initial={{ strokeDashoffset: 3 }}
-            animate={{ strokeDashoffset: direction >= 0 ? -197 : 203 }}
-            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+            initial={{ strokeDashoffset: 40 }}
+            animate={{ strokeDashoffset: direction >= 0 ? -460 : 540 }}
+            transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
           />
         </>
       )}
 
-      {/* Subtle wobble when active */}
+      {/* Subtle tape flutter when running */}
       {isActive && (
         <motion.path
           d={fullPath}
           fill="none"
-          stroke="rgba(200,140,80,0.08)"
-          strokeWidth="5"
-          animate={{ y: [0, 0.4, 0, -0.4, 0] }}
-          transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+          stroke="rgba(140,80,30,0.15)"
+          strokeWidth="4"
+          animate={{ y: [0, 0.3, 0, -0.3, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
         />
       )}
     </g>

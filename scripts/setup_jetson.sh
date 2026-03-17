@@ -17,7 +17,10 @@ sudo apt-get install -y \
     sqlite3 \
     nodejs npm \
     cmake build-essential \
-    libcurl4-openssl-dev
+    libcurl4-openssl-dev \
+    firefox \
+    unclutter \
+    curl
 
 # Data directories
 mkdir -p ~/.legacy-tape/recordings
@@ -86,9 +89,61 @@ EOF
     echo "Created $ENV_FILE"
 fi
 
+# -----------------------------------------------------------------------
+# Kiosk mode — backend service + Firefox autostart + auto-login
+# -----------------------------------------------------------------------
+echo ""
+echo "--- Kiosk mode setup ---"
+
+CURRENT_USER="$(whoami)"
+
+# Install and enable the systemd service for the backend
+SERVICE_SRC="$PROJECT_DIR/scripts/autostart.service"
+SERVICE_DST="/etc/systemd/system/legacy-tape.service"
+
+if [ -f "$SERVICE_SRC" ]; then
+    sudo cp "$SERVICE_SRC" "$SERVICE_DST"
+    sudo sed -i "s|User=.*|User=$CURRENT_USER|" "$SERVICE_DST"
+    sudo sed -i "s|/home/brett/|/home/$CURRENT_USER/|g" "$SERVICE_DST"
+    sudo sed -i "s|Environment=HOME=.*|Environment=HOME=/home/$CURRENT_USER|" "$SERVICE_DST"
+    sudo systemctl daemon-reload
+    sudo systemctl enable legacy-tape
+    echo "Backend service installed and enabled"
+fi
+
+# Make kiosk scripts executable
+chmod +x "$PROJECT_DIR/scripts/kiosk.sh" 2>/dev/null
+chmod +x "$PROJECT_DIR/scripts/toggle_kiosk.sh" 2>/dev/null
+
+# Install the XDG autostart entry for the kiosk browser
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$AUTOSTART_DIR"
+DESKTOP_SRC="$PROJECT_DIR/scripts/legacy-tape-kiosk.desktop"
+if [ -f "$DESKTOP_SRC" ]; then
+    sed "s|/home/brett/|/home/$CURRENT_USER/|g" "$DESKTOP_SRC" > "$AUTOSTART_DIR/legacy-tape-kiosk.desktop"
+    echo "Kiosk autostart installed"
+fi
+
+# Configure GDM auto-login (skip the login screen on boot)
+GDM_CONF="/etc/gdm3/custom.conf"
+if [ -f "$GDM_CONF" ]; then
+    if ! grep -q "AutomaticLoginEnable" "$GDM_CONF"; then
+        sudo sed -i "/^\[daemon\]/a AutomaticLoginEnable=True\nAutomaticLogin=$CURRENT_USER" "$GDM_CONF"
+        echo "Auto-login enabled for $CURRENT_USER"
+    else
+        echo "Auto-login already configured"
+    fi
+else
+    echo "WARNING: $GDM_CONF not found — auto-login not configured"
+fi
+
 echo ""
 echo "=== Setup complete ==="
 echo ""
-echo "Start with: ./scripts/start_legacy.sh"
-echo "Whisper binary: $WHISPER_DIR/build/bin/whisper-cli"
-echo "Whisper model:  $HOME/.legacy-tape/models/ggml-base.en.bin"
+echo "Start manually:  ./scripts/start_legacy.sh"
+echo "Kiosk control:   ./scripts/toggle_kiosk.sh on|off|status"
+echo "Whisper binary:  $WHISPER_DIR/build/bin/whisper-cli"
+echo "Whisper model:   $HOME/.legacy-tape/models/ggml-base.en.bin"
+echo ""
+echo "Reboot to launch in kiosk mode, or run:"
+echo "  ./scripts/toggle_kiosk.sh on && sudo reboot"

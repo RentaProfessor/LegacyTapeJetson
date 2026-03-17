@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Legacy Tape Kiosk
+Comment=Launch Legacy Tape UI in fullscreen kiosk mode
+Exec=/home/brett/legacy-tape/scripts/kiosk.sh
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=5

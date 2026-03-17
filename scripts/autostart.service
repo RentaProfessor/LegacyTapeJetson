@@ -1,21 +1,23 @@
 # Legacy Tape — systemd service for auto-start on Jetson boot
 # Install: sudo cp autostart.service /etc/systemd/system/legacy-tape.service
+#          sudo systemctl daemon-reload
 #          sudo systemctl enable legacy-tape
 #          sudo systemctl start legacy-tape
 
 [Unit]
 Description=Legacy Tape Storytelling Device
-After=network.target
+After=network.target sound.target
 
 [Service]
 Type=simple
-User=jetson
-WorkingDirectory=/home/jetson/legacy-tape/device
-ExecStart=/home/jetson/legacy-tape/device/.venv/bin/python main.py
+User=brett
+WorkingDirectory=/home/brett/legacy-tape/device
+ExecStart=/home/brett/legacy-tape/device/.venv/bin/python main.py
 Restart=always
-RestartSec=5
+RestartSec=3
 Environment=LT_WHISPER_MODEL=base
 Environment=LT_WHISPER_DEVICE=cuda
+Environment=HOME=/home/brett
 
 [Install]
 WantedBy=multi-user.target

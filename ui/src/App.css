@@ -1,6 +1,6 @@
 .legacy-tape {
-  width: 800px;
-  height: 480px;
+  width: 100vw;
+  height: 100vh;
   background: #2a2d30;
   display: flex;
   flex-direction: column;

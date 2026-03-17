@@ -15,7 +15,7 @@ sudo apt-get install -y \
     portaudio19-dev \
     ffmpeg \
     sqlite3 \
-    nodejs npm \
+    nodejs \
     cmake build-essential \
     libcurl4-openssl-dev \
     firefox \

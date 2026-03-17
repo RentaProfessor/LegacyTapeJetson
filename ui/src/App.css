@@ -1,0 +1,146 @@
+.legacy-tape {
+  width: 800px;
+  height: 480px;
+  background: #2a2d30;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  color: #e0e0e0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Transport control bar ── */
+
+.transport-bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 3px;
+  padding: 4px 6px;
+  background: linear-gradient(180deg, #1a1c1e 0%, #111214 100%);
+  border-top: 1px solid #333;
+  height: 72px;
+  align-items: stretch;
+}
+
+.transport-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: linear-gradient(180deg, #2e3236 0%, #232628 60%, #1e2022 100%);
+  border: 1px solid #3a3e42;
+  border-bottom: 2px solid #111;
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.08s ease;
+  min-width: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.transport-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, #1e2022 0%, #232628 100%);
+  border-bottom-width: 1px;
+  transform: translateY(1px);
+}
+
+.transport-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.transport-btn:disabled:active {
+  transform: none;
+  border-bottom-width: 2px;
+}
+
+.btn-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.btn-label {
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  font-family: 'Courier New', monospace;
+  opacity: 0.7;
+}
+
+/* ── Record ── */
+.transport-btn.rec {
+  color: #cc3333;
+}
+.transport-btn.rec .btn-icon {
+  font-size: 22px;
+}
+.transport-btn.rec.active {
+  background: linear-gradient(180deg, #3a1515 0%, #2a1010 100%);
+  border-color: #cc3333;
+  color: #ff4444;
+  box-shadow: 0 0 12px rgba(255, 50, 50, 0.25), inset 0 0 8px rgba(255, 50, 50, 0.08);
+}
+
+/* ── Play ── */
+.transport-btn.play {
+  color: #44aa44;
+}
+.transport-btn.play.active {
+  background: linear-gradient(180deg, #152a15 0%, #102010 100%);
+  border-color: #44aa44;
+  color: #55dd55;
+  box-shadow: 0 0 10px rgba(68, 170, 68, 0.2);
+}
+
+/* ── Stop ── */
+.transport-btn.stop {
+  color: #ccc;
+}
+
+/* ── Pause ── */
+.transport-btn.pause {
+  color: #cc9922;
+}
+.transport-btn.pause.active {
+  background: linear-gradient(180deg, #2a2515 0%, #201a10 100%);
+  border-color: #cc9922;
+  color: #eebb33;
+  box-shadow: 0 0 10px rgba(204, 153, 34, 0.2);
+}
+
+/* ── Rewind / FF ── */
+.transport-btn.rew,
+.transport-btn.ff {
+  color: #8899aa;
+}
+.transport-btn.rew.active,
+.transport-btn.ff.active {
+  background: linear-gradient(180deg, #1e2530 0%, #161a22 100%);
+  border-color: #6688aa;
+  color: #88bbdd;
+}
+
+/* ── Mode ── */
+.transport-btn.mode {
+  color: #aa88cc;
+  max-width: 90px;
+}
+.transport-btn.mode .btn-label {
+  font-size: 7px;
+  letter-spacing: 0.5px;
+}
+.mode-icon {
+  font-size: 18px !important;
+}
+
+/* ── New Story ── */
+.transport-btn.new-story {
+  color: #66aaaa;
+  max-width: 60px;
+}

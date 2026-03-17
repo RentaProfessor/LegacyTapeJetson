@@ -1,0 +1,13 @@
+.progress-bar {
+  flex-shrink: 0;
+  height: 6px;
+  background: #1a1e20;
+  width: 100%;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2a9950, #44cc66);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(68, 204, 102, 0.3);
+}

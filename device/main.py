@@ -231,6 +231,7 @@ async def handle_play() -> None:
 
     if not recorder.last_recording_path:
         logger.warning("No recording to play")
+        await broadcast({"type": "state", "state": "idle"})
         return
 
     loop = asyncio.get_event_loop()
@@ -246,6 +247,7 @@ async def handle_play() -> None:
         _playback_monitor_task = asyncio.create_task(_monitor_playback())
     else:
         logger.warning("Playback failed to start")
+        await broadcast({"type": "state", "state": "idle"})
 
 
 async def handle_rewind() -> None:

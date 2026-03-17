@@ -156,6 +156,8 @@ export default function App() {
   const handleRecord = () => {
     if (state === "recording" || state === "transcribing") return;
     setDeviceState("recording");
+    setTransport("idle");
+    setAudioLevel(0);
     if (!sendAction("record")) {
       setChapter({ chapter_num: chapterNum.current, title: `Chapter ${chapterNum.current}` });
       chapterNum.current += 1;
@@ -164,12 +166,14 @@ export default function App() {
 
   const handleStop = () => {
     if (state === "idle") return;
+    setDeviceState("idle");
     setTransport("idle");
+    setAudioLevel(0);
     sendAction("stop");
   };
 
   const handlePause = () => {
-    if (!["recording", "paused", "playback"].includes(state)) return;
+    if (!["recording", "paused"].includes(state)) return;
     if (state === "recording") setDeviceState("paused");
     else if (state === "paused") setDeviceState("recording");
     sendAction("pause");
@@ -212,11 +216,12 @@ export default function App() {
     sendAction("new_story");
   };
 
-  const isRecOrTranscribing = deviceState === "recording" || deviceState === "transcribing";
+  const isBusy = state === "recording" || state === "transcribing" || state === "paused";
+  const isIdle = state === "idle";
 
   return (
     <div className="legacy-tape">
-      <StatusBar state={state} mode={MODE_LABELS[mode] || mode} elapsed={elapsed} />
+      <StatusBar state={state} mode={MODE_LABELS[mode] || mode} elapsed={elapsed} connected={connected} />
 
       <CassetteWindow state={state} chapter={chapter} mode={mode} tapeProgress={tapePos} audioLevel={audioLevel} />
 
@@ -228,16 +233,16 @@ export default function App() {
         <button
           className={`transport-btn rew ${state === "rewinding" ? "active" : ""}`}
           onClick={handleRewind}
-          disabled={isRecOrTranscribing}
+          disabled={isBusy}
         >
           <span className="btn-icon">&#9664;&#9664;</span>
           <span className="btn-label">REW</span>
         </button>
 
         <button
-          className={`transport-btn stop`}
+          className={`transport-btn stop ${!isIdle ? "can-stop" : ""}`}
           onClick={handleStop}
-          disabled={state === "idle"}
+          disabled={isIdle}
         >
           <span className="btn-icon">&#9632;</span>
           <span className="btn-label">STOP</span>
@@ -246,7 +251,7 @@ export default function App() {
         <button
           className={`transport-btn play ${state === "playback" ? "active" : ""}`}
           onClick={handlePlay}
-          disabled={isRecOrTranscribing}
+          disabled={isBusy}
         >
           <span className="btn-icon">&#9654;</span>
           <span className="btn-label">PLAY</span>
@@ -264,7 +269,7 @@ export default function App() {
         <button
           className={`transport-btn pause ${state === "paused" ? "active" : ""}`}
           onClick={handlePause}
-          disabled={!["recording", "paused", "playback"].includes(state)}
+          disabled={!["recording", "paused"].includes(state)}
         >
           <span className="btn-icon">{state === "paused" ? "&#9654;" : "&#10074;&#10074;"}</span>
           <span className="btn-label">{state === "paused" ? "RESUME" : "PAUSE"}</span>
@@ -273,7 +278,7 @@ export default function App() {
         <button
           className={`transport-btn ff ${state === "ffwd" ? "active" : ""}`}
           onClick={handleFfwd}
-          disabled={isRecOrTranscribing}
+          disabled={isBusy}
         >
           <span className="btn-icon">&#9654;&#9654;</span>
           <span className="btn-label">FF</span>
@@ -290,7 +295,7 @@ export default function App() {
         <button
           className="transport-btn new-story"
           onClick={handleNewStory}
-          disabled={state !== "idle"}
+          disabled={!isIdle}
         >
           <span className="btn-icon">&#10010;</span>
           <span className="btn-label">NEW</span>

@@ -45,7 +45,19 @@ const statusVariants = {
 
 const statusTransition = { duration: 0.25, ease: "easeOut" };
 
-export default function StatusBar({ state, mode, elapsed }) {
+function ConnectionDot({ connected }) {
+  return (
+    <span
+      className="conn-dot"
+      style={{ color: connected ? "#4a4" : "#a44" }}
+      title={connected ? "Connected" : "Disconnected"}
+    >
+      ●
+    </span>
+  );
+}
+
+export default function StatusBar({ state, mode, elapsed, connected }) {
   const isRecording = state === "recording";
   const isActive = ["recording", "playback", "paused", "rewinding", "ffwd"].includes(state);
 
@@ -113,7 +125,7 @@ export default function StatusBar({ state, mode, elapsed }) {
 
       <div className="status-right">
         <TapeCounter elapsed={elapsed} />
-        <BluetoothIcon />
+        <ConnectionDot connected={connected} />
         <BatteryIcon />
       </div>
     </div>

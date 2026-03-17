@@ -103,7 +103,12 @@
 
 /* ── Stop ── */
 .transport-btn.stop {
-  color: #ccc;
+  color: #888;
+}
+.transport-btn.stop.can-stop {
+  color: #eee;
+  border-color: #666;
+  background: linear-gradient(180deg, #383c40 0%, #2a2e30 60%, #222426 100%);
 }
 
 /* ── Pause ── */

@@ -100,3 +100,8 @@
   text-align: center;
   border: 1px solid #333;
 }
+
+.conn-dot {
+  font-size: 10px;
+  line-height: 1;
+}

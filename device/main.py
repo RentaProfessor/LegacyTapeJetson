@@ -33,6 +33,8 @@ current_chapter: Optional[Dict] = None
 current_mode: str = settings.default_mode
 ws_clients: Set[WebSocket] = set()
 _playback_monitor_task: Optional[asyncio.Task] = None
+_recording_monitor_task: Optional[asyncio.Task] = None
+_transcription_task: Optional[asyncio.Task] = None
 
 
 async def broadcast(event: dict) -> None:
@@ -71,11 +73,68 @@ async def _monitor_playback() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Recording level monitor
+# ---------------------------------------------------------------------------
+
+async def _monitor_recording() -> None:
+    """Broadcast audio input level while recording so UI can show VU meter."""
+    try:
+        while recorder.is_recording:
+            level = recorder.get_level()
+            elapsed = recorder.elapsed_seconds
+            await broadcast({
+                "type": "recording_level",
+                "level": round(min(level, 1.0), 3),
+                "elapsed": round(elapsed, 1),
+            })
+            await asyncio.sleep(0.2)
+    except asyncio.CancelledError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Background transcription
+# ---------------------------------------------------------------------------
+
+async def _run_transcription(filepath: str, duration: float, chapter_id: str) -> None:
+    """Run transcription in background so the UI isn't blocked."""
+    global current_chapter
+    try:
+        rec = storage.save_recording(chapter_id, filepath, duration)
+        result = await transcribe(filepath)
+
+        processed = process_transcript(result["text"], current_mode)
+        storage.save_transcript(rec["id"], result["text"], processed)
+
+        title = generate_chapter_title(result["text"])
+        db = storage.get_db()
+        db.execute("UPDATE chapters SET title = ? WHERE id = ?", (title, chapter_id))
+        db.commit()
+
+        await broadcast({
+            "type": "transcript_ready",
+            "transcript": {
+                "raw": result["text"],
+                "processed": processed,
+                "duration": result["duration"],
+            },
+            "chapter_title": title,
+        })
+    except Exception as e:
+        logger.error(f"Transcription failed: {e}")
+        await broadcast({
+            "type": "error",
+            "action": "transcribe",
+            "message": str(e),
+        })
+
+
+# ---------------------------------------------------------------------------
 # Button handlers
 # ---------------------------------------------------------------------------
 
 async def handle_record() -> None:
-    global current_story, current_chapter
+    global current_story, current_chapter, _recording_monitor_task
 
     if recorder.is_recording:
         logger.info("Already recording")
@@ -101,6 +160,8 @@ async def handle_record() -> None:
         await broadcast({"type": "error", "action": "record", "message": str(e)})
         return
 
+    _recording_monitor_task = asyncio.create_task(_monitor_recording())
+
     await broadcast({
         "type": "state",
         "state": "recording",
@@ -112,7 +173,7 @@ async def handle_record() -> None:
 
 
 async def handle_stop() -> None:
-    global current_chapter, _playback_monitor_task
+    global current_chapter, _playback_monitor_task, _recording_monitor_task, _transcription_task
 
     if recorder.is_playing:
         recorder.stop_playback()
@@ -123,45 +184,32 @@ async def handle_stop() -> None:
         return
 
     if not recorder.is_recording:
+        await broadcast({"type": "state", "state": "idle"})
         return
+
+    if _recording_monitor_task:
+        _recording_monitor_task.cancel()
+        _recording_monitor_task = None
 
     result = recorder.stop()
     if not result:
         await broadcast({"type": "state", "state": "idle"})
+        await send_state({"state": "idle"})
         return
 
     filepath, duration = result
-    await broadcast({"type": "state", "state": "transcribing"})
+    logger.info(f"Recording stopped: {filepath} ({duration:.1f}s)")
 
-    rec = storage.save_recording(current_chapter["id"], filepath, duration)
-
-    result = await transcribe(filepath)
-
-    processed = process_transcript(result["text"], current_mode)
-    storage.save_transcript(rec["id"], result["text"], processed)
-
-    title = generate_chapter_title(result["text"])
-    if not current_chapter.get("title") or current_chapter["title"].startswith("Chapter"):
-        db = storage.get_db()
-        db.execute("UPDATE chapters SET title = ? WHERE id = ?", (title, current_chapter["id"]))
-        db.commit()
-        current_chapter["title"] = title
-
+    chapter_id = current_chapter["id"] if current_chapter else None
     current_chapter = None
 
-    await broadcast({
-        "type": "state",
-        "state": "idle",
-        "transcript": {
-            "raw": result["text"],
-            "processed": processed,
-            "duration": result["duration"],
-        },
-    })
-
-    if current_mode == "ai_interview":
-        questions = generate_follow_up_questions(result["text"])
-        await broadcast({"type": "follow_up", "questions": questions})
+    if chapter_id:
+        await broadcast({"type": "state", "state": "transcribing"})
+        _transcription_task = asyncio.create_task(
+            _run_transcription(filepath, duration, chapter_id)
+        )
+    else:
+        await broadcast({"type": "state", "state": "idle"})
 
     await send_state({"state": "idle"})
 

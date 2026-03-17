@@ -21,6 +21,7 @@ export default function App() {
   const [transcript, setTranscript] = useState(null);
   const [tapePos, setTapePos] = useState(0);
   const [connected, setConnected] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
   const ws = useRef(null);
   const timerRef = useRef(null);
   const tapeTimer = useRef(null);
@@ -53,7 +54,10 @@ export default function App() {
         const d = JSON.parse(e.data);
         if (d.type === "state") {
           setDeviceState(d.state);
-          if (d.state === "idle") setTransport("idle");
+          if (d.state === "idle") {
+            setTransport("idle");
+            setAudioLevel(0);
+          }
           if (d.state === "playback") setTransport("playback");
           if (d.mode) setMode(d.mode);
           if (d.story !== undefined) setStory(d.story);
@@ -63,6 +67,8 @@ export default function App() {
           setMode(d.mode);
         } else if (d.type === "new_chapter") {
           setChapter(d.chapter);
+        } else if (d.type === "recording_level") {
+          setAudioLevel(d.level || 0);
         } else if (d.type === "playback_progress") {
           if (d.progress !== undefined) {
             tapePosRef.current = d.progress;
@@ -71,10 +77,15 @@ export default function App() {
           if (d.position !== undefined) {
             setElapsed(Math.floor(d.position));
           }
+        } else if (d.type === "transcript_ready") {
+          setDeviceState("idle");
+          setTransport("idle");
+          if (d.transcript) setTranscript(d.transcript);
         } else if (d.type === "error") {
           console.error(`Action '${d.action}' failed: ${d.message}`);
           setDeviceState("idle");
           setTransport("idle");
+          setAudioLevel(0);
         }
       };
       sock.onerror = () => {};
@@ -207,7 +218,7 @@ export default function App() {
     <div className="legacy-tape">
       <StatusBar state={state} mode={MODE_LABELS[mode] || mode} elapsed={elapsed} />
 
-      <CassetteWindow state={state} chapter={chapter} mode={mode} tapeProgress={tapePos} />
+      <CassetteWindow state={state} chapter={chapter} mode={mode} tapeProgress={tapePos} audioLevel={audioLevel} />
 
       <ChapterBar chapter={chapter} state={state} />
 

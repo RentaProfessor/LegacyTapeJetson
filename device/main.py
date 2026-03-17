@@ -27,7 +27,8 @@ from sync_client import periodic_sync
 import storage
 
 # #region agent log
-_DEBUG_LOG = "/Users/brettchiate/Desktop/ROOT FILES/LEGACY TAPE/.cursor/debug-62dbf4.log"
+import os as _os
+_DEBUG_LOG = _os.path.join(_os.path.expanduser("~"), ".legacy-tape", "debug-62dbf4.log")
 def _dbg(msg, data=None, hyp="", loc="main.py"):
     try:
         with open(_DEBUG_LOG, "a") as f:
@@ -91,19 +92,27 @@ async def _monitor_playback() -> None:
 async def _monitor_recording() -> None:
     """Broadcast audio input level while recording so UI can show VU meter.
     Also monitors stream health and auto-stops on failure."""
+    GRACE_PERIOD = 2.0
+    FAIL_THRESHOLD = 3
+    fail_count = 0
     try:
         while recorder.is_recording:
-            if not recorder.stream_healthy:
-                logger.error("Audio stream failed — auto-stopping recording")
+            elapsed = recorder.elapsed_seconds
+
+            if elapsed > GRACE_PERIOD and not recorder.stream_healthy:
+                fail_count += 1
                 # #region agent log
-                _dbg("monitor detected stream failure, auto-stopping", {"stream_failed": recorder._stream_failed}, hyp="C", loc="main.py:_monitor_recording")
+                _dbg("stream unhealthy tick", {"fail_count": fail_count, "stream_failed": recorder._stream_failed, "elapsed": round(elapsed, 1)}, hyp="C", loc="main.py:_monitor_recording")
                 # #endregion
-                await handle_stop()
-                await broadcast({"type": "error", "action": "record", "message": "Audio device error — recording stopped"})
-                return
+                if fail_count >= FAIL_THRESHOLD:
+                    logger.error("Audio stream failed — auto-stopping recording")
+                    await handle_stop()
+                    await broadcast({"type": "error", "action": "record", "message": "Audio device error — recording stopped"})
+                    return
+            else:
+                fail_count = 0
 
             level = recorder.get_level()
-            elapsed = recorder.elapsed_seconds
             await broadcast({
                 "type": "recording_level",
                 "level": round(min(level, 1.0), 3),

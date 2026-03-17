@@ -271,7 +271,7 @@ export default function App() {
           onClick={handlePause}
           disabled={!["recording", "paused"].includes(state)}
         >
-          <span className="btn-icon">{state === "paused" ? "&#9654;" : "&#10074;&#10074;"}</span>
+          <span className="btn-icon">{state === "paused" ? "\u25B6" : "\u275A\u275A"}</span>
           <span className="btn-label">{state === "paused" ? "RESUME" : "PAUSE"}</span>
         </button>
 

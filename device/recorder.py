@@ -16,7 +16,8 @@ from loguru import logger
 from config import settings
 
 # #region agent log
-_DEBUG_LOG = "/Users/brettchiate/Desktop/ROOT FILES/LEGACY TAPE/.cursor/debug-62dbf4.log"
+import os as _os
+_DEBUG_LOG = _os.path.join(_os.path.expanduser("~"), ".legacy-tape", "debug-62dbf4.log")
 def _dbg(msg, data=None, hyp="", loc="recorder.py"):
     try:
         with open(_DEBUG_LOG, "a") as f:
@@ -173,15 +174,10 @@ class Recorder:
 
     @property
     def stream_healthy(self) -> bool:
-        """True when the audio stream is open and hasn't encountered errors."""
+        """True unless the audio callback has reported an explicit error."""
         if self._stream_failed:
             return False
-        if self._stream is None:
-            return False
-        try:
-            return self._stream.active
-        except Exception:
-            return False
+        return self._recording and self._stream is not None
 
     def _audio_callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:

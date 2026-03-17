@@ -108,7 +108,12 @@
 
 .version-label {
   font-family: 'Courier New', monospace;
-  font-size: 10px;
-  color: #555;
+  font-size: 11px;
+  color: #aabbcc;
   letter-spacing: 1px;
+  font-weight: bold;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }

@@ -307,6 +307,25 @@ class Recorder:
         self._play_thread.start()
         return True
 
+    def _get_working_output_rate(self, file_rate: int) -> int:
+        """Find a sample rate the output device accepts, preferring the file's native rate."""
+        device = self._output_device
+        candidates = [file_rate, 48000, 44100, 16000, 22050, 32000]
+        if device is not None:
+            try:
+                native = int(sd.query_devices(device)["default_samplerate"])
+                if native not in candidates:
+                    candidates.insert(0, native)
+            except Exception:
+                pass
+        for rate in candidates:
+            try:
+                sd.check_output_settings(device=device, samplerate=rate, channels=1, dtype="float32")
+                return rate
+            except Exception:
+                continue
+        return file_rate
+
     def _play_worker(self, filepath: str) -> None:
         try:
             data, samplerate = sf.read(filepath, dtype="float32")
@@ -321,16 +340,37 @@ class Recorder:
                 except Exception:
                     out_name = f"[{out_dev}]"
             peak = float(np.abs(data).max()) if len(data) > 0 else 0.0
-            logger.info(f"Playing: {filepath} ({self._play_duration:.1f}s, peak={peak:.4f}, output={out_name})")
+
+            out_rate = self._get_working_output_rate(samplerate)
+            if out_rate != samplerate:
+                num_samples = int(len(data) * out_rate / samplerate)
+                if data.ndim == 1:
+                    data = np.interp(
+                        np.linspace(0, len(data) - 1, num_samples),
+                        np.arange(len(data)),
+                        data,
+                    ).astype(np.float32)
+                else:
+                    resampled = np.zeros((num_samples, data.shape[1]), dtype=np.float32)
+                    for ch in range(data.shape[1]):
+                        resampled[:, ch] = np.interp(
+                            np.linspace(0, len(data) - 1, num_samples),
+                            np.arange(len(data)),
+                            data[:, ch],
+                        )
+                    data = resampled
+                logger.info(f"Resampled {samplerate}Hz → {out_rate}Hz for output device")
+
+            logger.info(f"Playing: {filepath} ({self._play_duration:.1f}s, peak={peak:.4f}, output={out_name}, rate={out_rate}Hz)")
             # #region agent log
-            _dbg("playback starting", {"file": filepath, "duration": round(self._play_duration, 1), "peak": round(peak, 4), "output_device": out_name}, hyp="F", loc="recorder.py:_play_worker")
+            _dbg("playback starting", {"file": filepath, "duration": round(self._play_duration, 1), "peak": round(peak, 4), "output_device": out_name, "out_rate": out_rate}, hyp="F", loc="recorder.py:_play_worker")
             # #endregion
 
             block_size = 1024
             total_frames = len(data)
             pos = 0
 
-            stream = sd.OutputStream(samplerate=samplerate, channels=data.ndim, dtype="float32", device=out_dev)
+            stream = sd.OutputStream(samplerate=out_rate, channels=data.ndim if data.ndim > 1 else 1, dtype="float32", device=out_dev)
             stream.start()
 
             try:
@@ -339,7 +379,7 @@ class Recorder:
                     chunk = data[pos:end]
                     stream.write(chunk)
                     pos = end
-                    self._play_position = pos / samplerate
+                    self._play_position = pos / out_rate
             finally:
                 stream.stop()
                 stream.close()

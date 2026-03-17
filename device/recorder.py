@@ -27,6 +27,21 @@ def _dbg(msg, data=None, hyp="", loc="recorder.py"):
 # #endregion
 
 
+_USB_KEYWORDS = [
+    "usb", "uac", "c-media", "blue", "samson", "fifine", "boya",
+    "rode", "shure", "audio-technica", "at2020", "yeti", "snowball",
+    "hyperx", "elgato", "focusrite", "scarlett", "behringer",
+    "maono", "tonor", "razer", "corsair", "jlab", "mic", "condenser",
+    "speaker", "headphone", "headset", "audio",
+]
+
+_BUILTIN_KEYWORDS = ["built-in", "hdmi", "monitor", "displayport", "dp"]
+
+
+def _is_builtin(name: str) -> bool:
+    return any(kw in name for kw in _BUILTIN_KEYWORDS)
+
+
 def find_usb_mic() -> Optional[int]:
     """Auto-detect a USB microphone and return its device index."""
     try:
@@ -35,29 +50,49 @@ def find_usb_mic() -> Optional[int]:
         logger.error(f"Failed to query audio devices: {e}")
         return None
 
-    usb_keywords = [
-        "usb", "uac", "c-media", "blue", "samson", "fifine", "boya",
-        "rode", "shure", "audio-technica", "at2020", "yeti", "snowball",
-        "hyperx", "elgato", "focusrite", "scarlett", "behringer",
-        "maono", "tonor", "razer", "corsair", "jlab", "mic", "condenser",
-    ]
     candidates = []
-
     for i, dev in enumerate(devices):
         if dev["max_input_channels"] < 1:
             continue
         name_lower = dev["name"].lower()
-        is_usb = any(kw in name_lower for kw in usb_keywords)
-        is_builtin = "built-in" in name_lower or "hdmi" in name_lower or "monitor" in name_lower
-        if is_usb and not is_builtin:
+        is_usb = any(kw in name_lower for kw in _USB_KEYWORDS)
+        if is_usb and not _is_builtin(name_lower):
             candidates.insert(0, (i, dev))
-        elif not is_builtin and "default" not in name_lower:
+        elif not _is_builtin(name_lower) and "default" not in name_lower:
             candidates.append((i, dev))
 
     if candidates:
         idx, dev = candidates[0]
         logger.info(f"Auto-detected input device: [{idx}] {dev['name']} "
                      f"(in:{dev['max_input_channels']} @ {dev['default_samplerate']:.0f}Hz)")
+        return idx
+
+    return None
+
+
+def find_usb_speaker() -> Optional[int]:
+    """Auto-detect a USB speaker / output device and return its device index."""
+    try:
+        devices = sd.query_devices()
+    except Exception as e:
+        logger.error(f"Failed to query audio devices: {e}")
+        return None
+
+    candidates = []
+    for i, dev in enumerate(devices):
+        if dev["max_output_channels"] < 1:
+            continue
+        name_lower = dev["name"].lower()
+        is_usb = any(kw in name_lower for kw in _USB_KEYWORDS)
+        if is_usb and not _is_builtin(name_lower):
+            candidates.insert(0, (i, dev))
+        elif not _is_builtin(name_lower) and "default" not in name_lower:
+            candidates.append((i, dev))
+
+    if candidates:
+        idx, dev = candidates[0]
+        logger.info(f"Auto-detected output device: [{idx}] {dev['name']} "
+                     f"(out:{dev['max_output_channels']} @ {dev['default_samplerate']:.0f}Hz)")
         return idx
 
     return None
@@ -102,24 +137,45 @@ class Recorder:
 
         self.last_recording_path: Optional[str] = None
         self._input_device: Optional[int] = None
+        self._output_device: Optional[int] = None
 
     def resolve_input_device(self) -> None:
-        """Detect and lock in the input device at startup."""
+        """Backwards-compat alias."""
+        self.resolve_devices()
+
+    def resolve_devices(self) -> None:
+        """Detect and lock in input + output devices at startup."""
+        # --- Input ---
         if settings.audio_device is not None and settings.audio_device != "":
             try:
                 self._input_device = int(settings.audio_device)
             except (ValueError, TypeError):
                 self._input_device = settings.audio_device
-            logger.info(f"Using configured audio device: {self._input_device}")
-            return
+            logger.info(f"Using configured input device: {self._input_device}")
+        else:
+            usb_idx = find_usb_mic()
+            if usb_idx is not None:
+                self._input_device = usb_idx
+            else:
+                logger.warning("No USB mic found — using system default input device")
+                self._input_device = None
 
-        usb_idx = find_usb_mic()
-        if usb_idx is not None:
-            self._input_device = usb_idx
-            return
+        # --- Output ---
+        if settings.output_device is not None and settings.output_device != "":
+            try:
+                self._output_device = int(settings.output_device)
+            except (ValueError, TypeError):
+                self._output_device = settings.output_device
+            logger.info(f"Using configured output device: {self._output_device}")
+        else:
+            usb_idx = find_usb_speaker()
+            if usb_idx is not None:
+                self._output_device = usb_idx
+            else:
+                logger.warning("No USB speaker found — using system default output device")
+                self._output_device = None
 
-        logger.warning("No USB mic found — using system default input device")
-        self._input_device = None
+        logger.info(f"Audio devices resolved — input: {self._input_device}, output: {self._output_device}")
 
     def _get_working_sample_rate(self) -> int:
         """Find a sample rate that works with the selected device."""
@@ -285,13 +341,19 @@ class Recorder:
             return None
 
         audio = np.concatenate(self._frames, axis=0)
+        peak = float(np.abs(audio).max())
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         filename = f"recording_{timestamp}.wav"
         filepath = str(Path(settings.recordings_dir) / filename)
 
         sf.write(filepath, audio, self._actual_sample_rate)
         actual_duration = len(audio) / self._actual_sample_rate
-        logger.info(f"Saved recording: {filepath} ({actual_duration:.1f}s, {self._actual_sample_rate}Hz, {len(self._frames)} frames)")
+        logger.info(f"Saved recording: {filepath} ({actual_duration:.1f}s, {self._actual_sample_rate}Hz, {len(self._frames)} frames, peak={peak:.4f})")
+        if peak < 0.001:
+            logger.warning("Recording peak is near-zero — microphone may not be capturing audio")
+        # #region agent log
+        _dbg("recording saved", {"file": filepath, "duration": round(actual_duration, 1), "frames": len(self._frames), "peak": round(peak, 4)}, hyp="F", loc="recorder.py:stop")
+        # #endregion
 
         self._frames = []
         self.last_recording_path = filepath
@@ -324,13 +386,24 @@ class Recorder:
             self._play_position = 0.0
             self._playing = True
 
-            logger.info(f"Playing: {filepath} ({self._play_duration:.1f}s)")
+            out_dev = self._output_device
+            out_name = "system default"
+            if out_dev is not None:
+                try:
+                    out_name = f"[{out_dev}] {sd.query_devices(out_dev)['name']}"
+                except Exception:
+                    out_name = f"[{out_dev}]"
+            peak = float(np.abs(data).max()) if len(data) > 0 else 0.0
+            logger.info(f"Playing: {filepath} ({self._play_duration:.1f}s, peak={peak:.4f}, output={out_name})")
+            # #region agent log
+            _dbg("playback starting", {"file": filepath, "duration": round(self._play_duration, 1), "peak": round(peak, 4), "output_device": out_name}, hyp="F", loc="recorder.py:_play_worker")
+            # #endregion
 
             block_size = 1024
             total_frames = len(data)
             pos = 0
 
-            stream = sd.OutputStream(samplerate=samplerate, channels=data.ndim, dtype="float32")
+            stream = sd.OutputStream(samplerate=samplerate, channels=data.ndim, dtype="float32", device=out_dev)
             stream.start()
 
             try:

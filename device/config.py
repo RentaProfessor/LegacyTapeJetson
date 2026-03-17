@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     sample_rate: int = 16000
     channels: int = 1
     audio_device: Optional[str] = None
+    output_device: Optional[str] = None
 
     # Whisper — "mock" uses fake transcripts for UI development
     whisper_backend: str = "auto"  # "whisper_cpp", "mock", or "auto"
@@ -96,17 +97,21 @@ class Settings(BaseSettings):
             import sounddevice as sd
             devices = sd.query_devices()
             default_in = sd.default.device[0]
+            default_out = sd.default.device[1]
             print(f"\n{'='*60}")
             print("AUDIO DEVICES")
             print(f"{'='*60}")
             for i, dev in enumerate(devices):
-                marker = ""
+                markers = []
                 if i == default_in:
-                    marker = " [DEFAULT INPUT]"
-                if dev["max_input_channels"] > 0:
+                    markers.append("DEFAULT IN")
+                if i == default_out:
+                    markers.append("DEFAULT OUT")
+                tag = f" [{', '.join(markers)}]" if markers else ""
+                if dev["max_input_channels"] > 0 or dev["max_output_channels"] > 0:
                     print(f"  [{i}] {dev['name']} "
                           f"(in:{dev['max_input_channels']} out:{dev['max_output_channels']} "
-                          f"@ {dev['default_samplerate']:.0f}Hz){marker}")
+                          f"@ {dev['default_samplerate']:.0f}Hz){tag}")
             print(f"{'='*60}\n")
         except Exception as e:
             print(f"Could not list audio devices: {e}")

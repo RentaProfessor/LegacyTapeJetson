@@ -336,7 +336,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name}")
     logger.info(f"Data dir: {settings.data_dir}")
 
-    recorder.resolve_input_device()
+    recorder.resolve_devices()
     warmup_whisper()
 
     on_button("record", handle_record)

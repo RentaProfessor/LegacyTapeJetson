@@ -27,98 +27,6 @@ def _dbg(msg, data=None, hyp="", loc="recorder.py"):
 # #endregion
 
 
-_USB_MIC_KEYWORDS = [
-    "usb", "uac", "c-media", "blue", "samson", "fifine", "boya",
-    "rode", "shure", "audio-technica", "at2020", "yeti", "snowball",
-    "hyperx", "elgato", "focusrite", "scarlett", "behringer",
-    "maono", "tonor", "razer", "corsair", "jlab", "mic", "condenser",
-    "audio",
-]
-
-_SKIP_INPUT_KEYWORDS = ["built-in", "hdmi", "monitor", "displayport"]
-
-_PREFER_OUTPUT_KEYWORDS = [
-    "usb", "uac", "c-media", "analog", "speaker", "headphone", "headset",
-    "audio", "line out", "line-out", "focusrite", "scarlett", "behringer",
-    "blue", "samson", "fifine", "boya", "rode", "maono",
-]
-
-_SKIP_OUTPUT_KEYWORDS = [
-    "hdmi", "monitor", "displayport", "dp audio",
-]
-
-
-def find_usb_mic() -> Optional[int]:
-    """Auto-detect a USB microphone and return its device index."""
-    try:
-        devices = sd.query_devices()
-    except Exception as e:
-        logger.error(f"Failed to query audio devices: {e}")
-        return None
-
-    candidates = []
-    for i, dev in enumerate(devices):
-        if dev["max_input_channels"] < 1:
-            continue
-        name_lower = dev["name"].lower()
-        if any(kw in name_lower for kw in _SKIP_INPUT_KEYWORDS):
-            continue
-        if name_lower in ("default", "pulse"):
-            continue
-        is_usb = any(kw in name_lower for kw in _USB_MIC_KEYWORDS)
-        if is_usb:
-            candidates.insert(0, (i, dev))
-        else:
-            candidates.append((i, dev))
-
-    if candidates:
-        idx, dev = candidates[0]
-        logger.info(f"Auto-detected input device: [{idx}] {dev['name']} "
-                     f"(in:{dev['max_input_channels']} @ {dev['default_samplerate']:.0f}Hz)")
-        return idx
-
-    return None
-
-
-def find_usb_speaker() -> Optional[int]:
-    """Auto-detect a speaker / output device, preferring USB or analog over HDMI."""
-    try:
-        devices = sd.query_devices()
-    except Exception as e:
-        logger.error(f"Failed to query audio devices: {e}")
-        return None
-
-    preferred: List[Tuple[int, dict]] = []
-    fallback: List[Tuple[int, dict]] = []
-
-    for i, dev in enumerate(devices):
-        if dev["max_output_channels"] < 1:
-            continue
-        name_lower = dev["name"].lower()
-        if any(kw in name_lower for kw in _SKIP_OUTPUT_KEYWORDS):
-            logger.debug(f"Skipping output device [{i}] {dev['name']} (HDMI/display)")
-            continue
-        if name_lower in ("default", "pulse"):
-            continue
-        if "built-in" in name_lower:
-            continue
-        if any(kw in name_lower for kw in _PREFER_OUTPUT_KEYWORDS):
-            preferred.append((i, dev))
-        else:
-            fallback.append((i, dev))
-
-    pick = preferred[0] if preferred else (fallback[0] if fallback else None)
-    if pick:
-        idx, dev = pick
-        tier = "preferred" if preferred and pick == preferred[0] else "fallback"
-        logger.info(f"Auto-detected output device ({tier}): [{idx}] {dev['name']} "
-                     f"(out:{dev['max_output_channels']} @ {dev['default_samplerate']:.0f}Hz)")
-        return idx
-
-    logger.warning("No suitable output device found — all are HDMI/display or missing")
-    return None
-
-
 def list_audio_devices() -> list:
     """Return a list of audio device info dicts for the API."""
     try:
@@ -165,15 +73,11 @@ class Recorder:
         self.resolve_devices()
 
     def resolve_devices(self) -> None:
-        """Detect and lock in input + output devices at startup."""
-        try:
-            all_devs = sd.query_devices()
-            for i, d in enumerate(all_devs):
-                if d["max_input_channels"] > 0 or d["max_output_channels"] > 0:
-                    _dbg("device enumeration", {"idx": i, "name": d["name"], "in": d["max_input_channels"], "out": d["max_output_channels"]}, hyp="G", loc="recorder.py:resolve_devices")
-        except Exception:
-            pass
+        """Lock in input + output devices at startup.
 
+        Uses system defaults unless LT_AUDIO_DEVICE / LT_OUTPUT_DEVICE
+        are set. Configure the correct devices in the OS sound settings.
+        """
         # --- Input ---
         if settings.audio_device is not None and settings.audio_device != "":
             try:
@@ -182,12 +86,8 @@ class Recorder:
                 self._input_device = settings.audio_device
             logger.info(f"Using configured input device: {self._input_device}")
         else:
-            usb_idx = find_usb_mic()
-            if usb_idx is not None:
-                self._input_device = usb_idx
-            else:
-                logger.warning("No USB mic found — using system default input device")
-                self._input_device = None
+            logger.info("Using system default input device (set LT_AUDIO_DEVICE to override)")
+            self._input_device = None
 
         # --- Output ---
         if settings.output_device is not None and settings.output_device != "":
@@ -197,12 +97,8 @@ class Recorder:
                 self._output_device = settings.output_device
             logger.info(f"Using configured output device: {self._output_device}")
         else:
-            usb_idx = find_usb_speaker()
-            if usb_idx is not None:
-                self._output_device = usb_idx
-            else:
-                logger.warning("No USB speaker found — using system default output device")
-                self._output_device = None
+            logger.info("Using system default output device (set LT_OUTPUT_DEVICE to override)")
+            self._output_device = None
 
         logger.info(f"Audio devices resolved — input: {self._input_device}, output: {self._output_device}")
 

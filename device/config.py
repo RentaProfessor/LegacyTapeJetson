@@ -108,10 +108,9 @@ class Settings(BaseSettings):
                 if i == default_out:
                     markers.append("DEFAULT OUT")
                 tag = f" [{', '.join(markers)}]" if markers else ""
-                if dev["max_input_channels"] > 0 or dev["max_output_channels"] > 0:
-                    print(f"  [{i}] {dev['name']} "
-                          f"(in:{dev['max_input_channels']} out:{dev['max_output_channels']} "
-                          f"@ {dev['default_samplerate']:.0f}Hz){tag}")
+                print(f"  [{i}] {dev['name']} "
+                      f"(in:{dev['max_input_channels']} out:{dev['max_output_channels']} "
+                      f"@ {dev['default_samplerate']:.0f}Hz){tag}")
             print(f"{'='*60}\n")
         except Exception as e:
             print(f"Could not list audio devices: {e}")

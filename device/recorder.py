@@ -27,19 +27,25 @@ def _dbg(msg, data=None, hyp="", loc="recorder.py"):
 # #endregion
 
 
-_USB_KEYWORDS = [
+_USB_MIC_KEYWORDS = [
     "usb", "uac", "c-media", "blue", "samson", "fifine", "boya",
     "rode", "shure", "audio-technica", "at2020", "yeti", "snowball",
     "hyperx", "elgato", "focusrite", "scarlett", "behringer",
     "maono", "tonor", "razer", "corsair", "jlab", "mic", "condenser",
-    "speaker", "headphone", "headset", "audio",
+    "audio",
 ]
 
-_BUILTIN_KEYWORDS = ["built-in", "hdmi", "monitor", "displayport", "dp"]
+_SKIP_INPUT_KEYWORDS = ["built-in", "hdmi", "monitor", "displayport"]
 
+_PREFER_OUTPUT_KEYWORDS = [
+    "usb", "uac", "c-media", "analog", "speaker", "headphone", "headset",
+    "audio", "line out", "line-out", "focusrite", "scarlett", "behringer",
+    "blue", "samson", "fifine", "boya", "rode", "maono",
+]
 
-def _is_builtin(name: str) -> bool:
-    return any(kw in name for kw in _BUILTIN_KEYWORDS)
+_SKIP_OUTPUT_KEYWORDS = [
+    "hdmi", "monitor", "displayport", "dp audio",
+]
 
 
 def find_usb_mic() -> Optional[int]:
@@ -55,10 +61,14 @@ def find_usb_mic() -> Optional[int]:
         if dev["max_input_channels"] < 1:
             continue
         name_lower = dev["name"].lower()
-        is_usb = any(kw in name_lower for kw in _USB_KEYWORDS)
-        if is_usb and not _is_builtin(name_lower):
+        if any(kw in name_lower for kw in _SKIP_INPUT_KEYWORDS):
+            continue
+        if name_lower in ("default", "pulse"):
+            continue
+        is_usb = any(kw in name_lower for kw in _USB_MIC_KEYWORDS)
+        if is_usb:
             candidates.insert(0, (i, dev))
-        elif not _is_builtin(name_lower) and "default" not in name_lower:
+        else:
             candidates.append((i, dev))
 
     if candidates:
@@ -71,30 +81,41 @@ def find_usb_mic() -> Optional[int]:
 
 
 def find_usb_speaker() -> Optional[int]:
-    """Auto-detect a USB speaker / output device and return its device index."""
+    """Auto-detect a speaker / output device, preferring USB or analog over HDMI."""
     try:
         devices = sd.query_devices()
     except Exception as e:
         logger.error(f"Failed to query audio devices: {e}")
         return None
 
-    candidates = []
+    preferred: List[Tuple[int, dict]] = []
+    fallback: List[Tuple[int, dict]] = []
+
     for i, dev in enumerate(devices):
         if dev["max_output_channels"] < 1:
             continue
         name_lower = dev["name"].lower()
-        is_usb = any(kw in name_lower for kw in _USB_KEYWORDS)
-        if is_usb and not _is_builtin(name_lower):
-            candidates.insert(0, (i, dev))
-        elif not _is_builtin(name_lower) and "default" not in name_lower:
-            candidates.append((i, dev))
+        if any(kw in name_lower for kw in _SKIP_OUTPUT_KEYWORDS):
+            logger.debug(f"Skipping output device [{i}] {dev['name']} (HDMI/display)")
+            continue
+        if name_lower in ("default", "pulse"):
+            continue
+        if "built-in" in name_lower:
+            continue
+        if any(kw in name_lower for kw in _PREFER_OUTPUT_KEYWORDS):
+            preferred.append((i, dev))
+        else:
+            fallback.append((i, dev))
 
-    if candidates:
-        idx, dev = candidates[0]
-        logger.info(f"Auto-detected output device: [{idx}] {dev['name']} "
+    pick = preferred[0] if preferred else (fallback[0] if fallback else None)
+    if pick:
+        idx, dev = pick
+        tier = "preferred" if preferred and pick == preferred[0] else "fallback"
+        logger.info(f"Auto-detected output device ({tier}): [{idx}] {dev['name']} "
                      f"(out:{dev['max_output_channels']} @ {dev['default_samplerate']:.0f}Hz)")
         return idx
 
+    logger.warning("No suitable output device found — all are HDMI/display or missing")
     return None
 
 
@@ -145,6 +166,14 @@ class Recorder:
 
     def resolve_devices(self) -> None:
         """Detect and lock in input + output devices at startup."""
+        try:
+            all_devs = sd.query_devices()
+            for i, d in enumerate(all_devs):
+                if d["max_input_channels"] > 0 or d["max_output_channels"] > 0:
+                    _dbg("device enumeration", {"idx": i, "name": d["name"], "in": d["max_input_channels"], "out": d["max_output_channels"]}, hyp="G", loc="recorder.py:resolve_devices")
+        except Exception:
+            pass
+
         # --- Input ---
         if settings.audio_device is not None and settings.audio_device != "":
             try:

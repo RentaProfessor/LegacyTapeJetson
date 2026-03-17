@@ -94,7 +94,13 @@ async def handle_record() -> None:
             current_story["id"], next_num, f"Chapter {next_num}"
         )
 
-    recorder.start()
+    try:
+        recorder.start()
+    except Exception as e:
+        logger.error(f"Failed to start recording: {e}")
+        await broadcast({"type": "error", "action": "record", "message": str(e)})
+        return
+
     await broadcast({
         "type": "state",
         "state": "recording",
@@ -293,24 +299,33 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             data = await ws.receive_json()
             action = data.get("action")
-            if action == "record":
-                await handle_record()
-            elif action == "stop":
-                await handle_stop()
-            elif action == "pause":
-                await handle_pause()
-            elif action == "play":
-                await handle_play()
-            elif action == "rewind":
-                await handle_rewind()
-            elif action == "ffwd":
-                await handle_ffwd()
-            elif action == "mode":
-                await handle_mode(data.get("value"))
-            elif action == "new_story":
-                current_story = None
-                current_chapter = None
-                await broadcast({"type": "state", "state": "idle", "story": None, "chapter": None})
+            try:
+                if action == "record":
+                    await handle_record()
+                elif action == "stop":
+                    await handle_stop()
+                elif action == "pause":
+                    await handle_pause()
+                elif action == "play":
+                    await handle_play()
+                elif action == "rewind":
+                    await handle_rewind()
+                elif action == "ffwd":
+                    await handle_ffwd()
+                elif action == "mode":
+                    await handle_mode(data.get("value"))
+                elif action == "new_story":
+                    current_story = None
+                    current_chapter = None
+                    await broadcast({"type": "state", "state": "idle", "story": None, "chapter": None})
+            except Exception as e:
+                logger.error(f"Action '{action}' failed: {e}")
+                await broadcast({
+                    "type": "error",
+                    "action": action,
+                    "message": str(e),
+                })
+                await broadcast({"type": "state", "state": "idle"})
     except WebSocketDisconnect:
         ws_clients.discard(ws)
         logger.info(f"UI disconnected ({len(ws_clients)} clients)")

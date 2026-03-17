@@ -71,6 +71,10 @@ export default function App() {
           if (d.position !== undefined) {
             setElapsed(Math.floor(d.position));
           }
+        } else if (d.type === "error") {
+          console.error(`Action '${d.action}' failed: ${d.message}`);
+          setDeviceState("idle");
+          setTransport("idle");
         }
       };
       sock.onerror = () => {};
@@ -140,8 +144,8 @@ export default function App() {
 
   const handleRecord = () => {
     if (state === "recording" || state === "transcribing") return;
+    setDeviceState("recording");
     if (!sendAction("record")) {
-      setDeviceState("recording");
       setChapter({ chapter_num: chapterNum.current, title: `Chapter ${chapterNum.current}` });
       chapterNum.current += 1;
     }
@@ -149,60 +153,52 @@ export default function App() {
 
   const handleStop = () => {
     if (state === "idle") return;
-    if (!sendAction("stop")) {
-      setDeviceState("idle");
-    }
     setTransport("idle");
+    sendAction("stop");
   };
 
   const handlePause = () => {
     if (!["recording", "paused", "playback"].includes(state)) return;
-    if (!sendAction("pause")) {
-      if (deviceState === "recording") setDeviceState("paused");
-      else if (deviceState === "paused") setDeviceState("recording");
-      else if (transport === "playback") setTransport("idle");
-    }
+    if (state === "recording") setDeviceState("paused");
+    else if (state === "paused") setDeviceState("recording");
+    sendAction("pause");
   };
 
   const handlePlay = () => {
-    if (deviceState === "recording" || deviceState === "transcribing") return;
-    if (!sendAction("play")) {
-      setTransport("playback");
-    }
+    if (state === "recording" || state === "transcribing") return;
+    setTransport("playback");
+    sendAction("play");
   };
 
   const handleRewind = () => {
-    if (deviceState === "recording" || deviceState === "transcribing") return;
+    if (state === "recording" || state === "transcribing") return;
     if (tapePosRef.current <= 0.03) return;
-    sendAction("rewind");
     setTransport("rewinding");
+    sendAction("rewind");
   };
 
   const handleFfwd = () => {
-    if (deviceState === "recording" || deviceState === "transcribing") return;
+    if (state === "recording" || state === "transcribing") return;
     if (tapePosRef.current >= 0.97) return;
-    sendAction("ffwd");
     setTransport("ffwd");
+    sendAction("ffwd");
   };
 
   const handleMode = () => {
+    const modes = ["clean", "ai_interview", "ghost_writer"];
+    const idx = modes.indexOf(mode);
+    setMode(modes[(idx + 1) % modes.length]);
     sendAction("mode");
-    if (!connected) {
-      const modes = ["clean", "ai_interview", "ghost_writer"];
-      const idx = modes.indexOf(mode);
-      setMode(modes[(idx + 1) % modes.length]);
-    }
   };
 
   const handleNewStory = () => {
     if (state !== "idle") return;
-    if (!sendAction("new_story")) {
-      setStory(null);
-      setChapter(null);
-      chapterNum.current = 1;
-      tapePosRef.current = 0;
-      setTapePos(0);
-    }
+    setStory(null);
+    setChapter(null);
+    chapterNum.current = 1;
+    tapePosRef.current = 0;
+    setTapePos(0);
+    sendAction("new_story");
   };
 
   const isRecOrTranscribing = deviceState === "recording" || deviceState === "transcribing";

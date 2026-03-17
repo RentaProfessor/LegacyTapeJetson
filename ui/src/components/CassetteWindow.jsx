@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import "./CassetteWindow.css";
 
@@ -15,23 +15,44 @@ function reelRadius(tapeFraction) {
 }
 
 function SpokeHub() {
+  const teethCount = 6;
+  const teeth = Array.from({ length: teethCount }, (_, i) => {
+    const deg = (i * 360) / teethCount;
+    const rad = (deg * Math.PI) / 180;
+    const inner = HUB_R - 6;
+    const outer = HUB_R - 1;
+    const halfAngle = (Math.PI / teethCount) * 0.6;
+    const radL = rad - halfAngle;
+    const radR = rad + halfAngle;
+    return `M ${Math.cos(radL) * inner} ${Math.sin(radL) * inner}
+            L ${Math.cos(radL) * outer} ${Math.sin(radL) * outer}
+            A ${outer} ${outer} 0 0 1 ${Math.cos(radR) * outer} ${Math.sin(radR) * outer}
+            L ${Math.cos(radR) * inner} ${Math.sin(radR) * inner} Z`;
+  });
+
   const spokes = [0, 120, 240].map((deg) => {
     const rad = (deg * Math.PI) / 180;
     return {
-      x1: Math.cos(rad) * 5,
-      y1: Math.sin(rad) * 5,
-      x2: Math.cos(rad) * (HUB_R - 3),
-      y2: Math.sin(rad) * (HUB_R - 3),
+      x1: Math.cos(rad) * 7,
+      y1: Math.sin(rad) * 7,
+      x2: Math.cos(rad) * (HUB_R - 7),
+      y2: Math.sin(rad) * (HUB_R - 7),
     };
   });
 
   return (
     <g>
-      <circle cx={0} cy={0} r={HUB_R} fill="#1a1c1e" stroke="#555" strokeWidth="1" />
-      <circle cx={0} cy={0} r={6} fill="#222426" stroke="#666" strokeWidth="0.6" />
-      {spokes.map((s, i) => (
-        <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke="#666" strokeWidth="3" strokeLinecap="round" />
+      <circle cx={0} cy={0} r={HUB_R} fill="#1a1c1e" stroke="#4a4e52" strokeWidth="1.2" />
+      <circle cx={0} cy={0} r={HUB_R - 2} fill="none" stroke="#333" strokeWidth="0.5" />
+      {teeth.map((d, i) => (
+        <path key={`t${i}`} d={d} fill="#555" stroke="#666" strokeWidth="0.3" />
       ))}
+      {spokes.map((s, i) => (
+        <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke="#555" strokeWidth="2.5" strokeLinecap="round" />
+      ))}
+      <circle cx={0} cy={0} r={8} fill="#222426" stroke="#555" strokeWidth="0.8" />
+      <circle cx={0} cy={0} r={4} fill="#1a1c1e" stroke="#444" strokeWidth="0.5" />
+      <circle cx={0} cy={0} r={1.5} fill="#333" />
     </g>
   );
 }
@@ -197,41 +218,81 @@ const STATE_TEXT = {
   transcribing: "PROCESSING...",
 };
 
-function TapePath({ leftR, rightR, headY, isActive }) {
+function TapePath({ leftR, rightR, headY, isActive, direction }) {
   const leftTangentY = RY + leftR;
   const rightTangentY = RY + rightR;
 
   const guide1X = 135;
   const guide2X = 665;
 
-  const pathLines = (
-    <>
-      {/* Tape shadow / glow */}
-      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="rgba(120,70,30,0.25)" strokeWidth="8" strokeLinecap="round" />
-      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="rgba(120,70,30,0.25)" strokeWidth="8" strokeLinecap="round" />
-      <path d={`M ${guide1X} ${headY - 2} Q 400 ${headY + 8} ${guide2X} ${headY - 2}`} fill="none" stroke="rgba(120,70,30,0.25)" strokeWidth="8" strokeLinecap="round" />
-      {/* Main tape */}
-      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
-      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
-      <path d={`M ${guide1X} ${headY - 2} Q 400 ${headY + 8} ${guide2X} ${headY - 2}`} fill="none" stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
-      {/* Tape highlight */}
-      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="rgba(200,140,80,0.2)" strokeWidth="2" />
-      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="rgba(200,140,80,0.2)" strokeWidth="2" />
-    </>
+  const fullPath = `M ${LCX} ${leftTangentY} L ${guide1X} ${headY - 2} Q 400 ${headY + 8} ${guide2X} ${headY - 2} L ${RCX} ${rightTangentY}`;
+
+  return (
+    <g>
+      {/* Tape shadow */}
+      <path d={fullPath} fill="none" stroke="rgba(80,40,10,0.35)" strokeWidth="8" strokeLinecap="round" />
+
+      {/* Base tape */}
+      <path d={fullPath} fill="none" stroke="#6a3a15" strokeWidth="5" strokeLinecap="round" />
+
+      {/* Glossy tape surface */}
+      <path d={fullPath} fill="none" stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
+
+      {/* Top highlight edge */}
+      <path d={fullPath} fill="none" stroke="rgba(210,150,90,0.25)" strokeWidth="1.5" strokeLinecap="round" />
+
+      {/* Animated texture lines — visible grain moving along the tape */}
+      {isActive && (
+        <>
+          <motion.path
+            d={fullPath}
+            fill="none"
+            stroke="rgba(180,120,60,0.3)"
+            strokeWidth="3.5"
+            strokeDasharray="2 8"
+            strokeLinecap="round"
+            initial={{ strokeDashoffset: 0 }}
+            animate={{ strokeDashoffset: direction >= 0 ? -200 : 200 }}
+            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+          />
+          <motion.path
+            d={fullPath}
+            fill="none"
+            stroke="rgba(255,200,130,0.12)"
+            strokeWidth="2"
+            strokeDasharray="4 16"
+            strokeLinecap="round"
+            initial={{ strokeDashoffset: 5 }}
+            animate={{ strokeDashoffset: direction >= 0 ? -195 : 205 }}
+            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+          />
+          <motion.path
+            d={fullPath}
+            fill="none"
+            stroke="rgba(60,30,10,0.25)"
+            strokeWidth="4"
+            strokeDasharray="1 12"
+            strokeLinecap="round"
+            initial={{ strokeDashoffset: 3 }}
+            animate={{ strokeDashoffset: direction >= 0 ? -197 : 203 }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+          />
+        </>
+      )}
+
+      {/* Subtle wobble when active */}
+      {isActive && (
+        <motion.path
+          d={fullPath}
+          fill="none"
+          stroke="rgba(200,140,80,0.08)"
+          strokeWidth="5"
+          animate={{ y: [0, 0.4, 0, -0.4, 0] }}
+          transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+        />
+      )}
+    </g>
   );
-
-  if (isActive) {
-    return (
-      <motion.g
-        animate={{ y: [0, 0.5, 0, -0.5, 0] }}
-        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-      >
-        {pathLines}
-      </motion.g>
-    );
-  }
-
-  return <g>{pathLines}</g>;
 }
 
 export default function CassetteWindow({ state, chapter, mode, tapeProgress, audioLevel }) {
@@ -344,7 +405,7 @@ export default function CassetteWindow({ state, chapter, mode, tapeProgress, aud
           <Reel cx={LCX} cy={RY} tapeR={leftR} spinning={spin.on} duration={spin.dur} direction={spin.dir} side="left" />
           <Reel cx={RCX} cy={RY} tapeR={rightR} spinning={spin.on} duration={spin.dur * 0.78} direction={spin.dir} side="right" />
 
-          <TapePath leftR={leftR} rightR={rightR} headY={headY} isActive={isActive} />
+          <TapePath leftR={leftR} rightR={rightR} headY={headY} isActive={isActive} direction={spin.dir} />
 
           <GuideRoller cx={135} cy={headY - 2} spinning={isActive} direction={spin.dir} />
           <GuideRoller cx={665} cy={headY - 2} spinning={isActive} direction={spin.dir} />

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import threading
 import time
 from pathlib import Path
@@ -24,24 +23,29 @@ def find_usb_mic() -> Optional[int]:
         logger.error(f"Failed to query audio devices: {e}")
         return None
 
-    usb_keywords = ["usb", "uac", "c-media", "blue", "samson", "fifine", "boya"]
+    usb_keywords = [
+        "usb", "uac", "c-media", "blue", "samson", "fifine", "boya",
+        "rode", "shure", "audio-technica", "at2020", "yeti", "snowball",
+        "hyperx", "elgato", "focusrite", "scarlett", "behringer",
+        "maono", "tonor", "razer", "corsair", "jlab", "mic", "condenser",
+    ]
     candidates = []
 
     for i, dev in enumerate(devices):
         if dev["max_input_channels"] < 1:
             continue
         name_lower = dev["name"].lower()
-        hostapi = sd.query_hostapis(dev["hostapi"])["name"].lower()
         is_usb = any(kw in name_lower for kw in usb_keywords)
-        is_external = "built-in" not in name_lower and "hdmi" not in name_lower
-        if is_usb:
+        is_builtin = "built-in" in name_lower or "hdmi" in name_lower or "monitor" in name_lower
+        if is_usb and not is_builtin:
             candidates.insert(0, (i, dev))
-        elif is_external and "default" not in name_lower:
+        elif not is_builtin and "default" not in name_lower:
             candidates.append((i, dev))
 
     if candidates:
         idx, dev = candidates[0]
-        logger.info(f"Auto-detected USB mic: [{idx}] {dev['name']}")
+        logger.info(f"Auto-detected input device: [{idx}] {dev['name']} "
+                     f"(in:{dev['max_input_channels']} @ {dev['default_samplerate']:.0f}Hz)")
         return idx
 
     return None
@@ -71,9 +75,11 @@ class Recorder:
         self._paused = False
         self._frames: List[np.ndarray] = []
         self._stream: Optional[sd.InputStream] = None
+        self._stream_failed = False
         self._start_time: float = 0
         self._pause_offset: float = 0
         self._pause_start: float = 0
+        self._actual_sample_rate: int = settings.sample_rate
 
         self._playing = False
         self._play_thread: Optional[threading.Thread] = None
@@ -102,6 +108,29 @@ class Recorder:
 
         logger.warning("No USB mic found — using system default input device")
         self._input_device = None
+
+    def _get_working_sample_rate(self) -> int:
+        """Find a sample rate that works with the selected device."""
+        device = self._input_device
+        preferred_rates = [settings.sample_rate, 44100, 48000, 16000, 22050, 32000]
+
+        if device is not None:
+            try:
+                dev_info = sd.query_devices(device)
+                native_rate = int(dev_info["default_samplerate"])
+                if native_rate not in preferred_rates:
+                    preferred_rates.insert(0, native_rate)
+            except Exception:
+                pass
+
+        for rate in preferred_rates:
+            try:
+                sd.check_input_settings(device=device, samplerate=rate, channels=settings.channels, dtype="float32")
+                return rate
+            except Exception:
+                continue
+
+        return settings.sample_rate
 
     @property
     def is_recording(self) -> bool:
@@ -133,7 +162,10 @@ class Recorder:
 
     def _audio_callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:
-            logger.warning(f"Audio status: {status}")
+            logger.warning(f"Audio callback status: {status}")
+            if "error" in str(status).lower():
+                self._stream_failed = True
+                return
         if self._recording and not self._paused:
             self._frames.append(indata.copy())
 
@@ -150,24 +182,32 @@ class Recorder:
         self._start_time = time.time()
         self._recording = True
         self._paused = False
+        self._stream_failed = False
+
+        sample_rate = self._get_working_sample_rate()
+        self._actual_sample_rate = sample_rate
+
+        device = self._input_device
+        dev_name = "system default"
+        if device is not None:
+            try:
+                dev_name = f"[{device}] {sd.query_devices(device)['name']}"
+            except Exception:
+                dev_name = f"[{device}]"
+
+        logger.info(f"Starting recording: device={dev_name}, rate={sample_rate}Hz, ch={settings.channels}")
 
         try:
             self._stream = sd.InputStream(
-                samplerate=settings.sample_rate,
+                samplerate=sample_rate,
                 channels=settings.channels,
                 dtype="float32",
-                device=self._input_device,
+                device=device,
                 callback=self._audio_callback,
                 blocksize=1024,
             )
             self._stream.start()
-            dev_name = "default"
-            if self._input_device is not None:
-                try:
-                    dev_name = sd.query_devices(self._input_device)["name"]
-                except Exception:
-                    dev_name = str(self._input_device)
-            logger.info(f"Recording started (device: {dev_name})")
+            logger.info(f"Recording stream opened successfully")
         except Exception as e:
             self._recording = False
             logger.error(f"Failed to start recording: {e}")
@@ -198,12 +238,15 @@ class Recorder:
         self._paused = False
 
         if self._stream:
-            self._stream.stop()
-            self._stream.close()
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception as e:
+                logger.warning(f"Error closing stream: {e}")
             self._stream = None
 
         if not self._frames:
-            logger.warning("No audio frames captured")
+            logger.warning("No audio frames captured — mic may not be working")
             return None
 
         audio = np.concatenate(self._frames, axis=0)
@@ -211,9 +254,9 @@ class Recorder:
         filename = f"recording_{timestamp}.wav"
         filepath = str(Path(settings.recordings_dir) / filename)
 
-        sf.write(filepath, audio, settings.sample_rate)
-        actual_duration = len(audio) / settings.sample_rate
-        logger.info(f"Saved recording: {filepath} ({actual_duration:.1f}s)")
+        sf.write(filepath, audio, self._actual_sample_rate)
+        actual_duration = len(audio) / self._actual_sample_rate
+        logger.info(f"Saved recording: {filepath} ({actual_duration:.1f}s, {self._actual_sample_rate}Hz, {len(self._frames)} frames)")
 
         self._frames = []
         self.last_recording_path = filepath
@@ -289,10 +332,13 @@ class Recorder:
 
     def get_level(self) -> float:
         """Return current audio input level (0-1) for VU meter display."""
-        if not self._frames or not self._recording:
+        if not self._recording or not self._frames:
             return 0.0
-        last_frame = self._frames[-1]
-        return float(np.abs(last_frame).mean()) * 10
+        try:
+            last_frame = self._frames[-1]
+            return float(np.abs(last_frame).mean()) * 10
+        except (IndexError, ValueError):
+            return 0.0
 
 
 recorder = Recorder()

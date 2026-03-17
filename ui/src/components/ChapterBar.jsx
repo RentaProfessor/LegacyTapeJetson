@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import "./ChapterBar.css";
 
 export default function ChapterBar({ chapter, state }) {
-  const chapterText = chapter
-    ? `CHAPTER ${chapter.chapter_num}: ${(chapter.title || "UNTITLED").toUpperCase()}`
-    : "LEGACY TAPE";
+  let chapterText = "LEGACY TAPE";
+  if (chapter && typeof chapter === "object" && chapter.chapter_num != null) {
+    const title = (typeof chapter.title === "string" && chapter.title) ? chapter.title.toUpperCase() : "UNTITLED";
+    chapterText = `CH ${chapter.chapter_num}: ${title}`;
+  }
 
   const isTranscribing = state === "transcribing";
 

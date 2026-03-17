@@ -206,11 +206,17 @@ function TapePath({ leftR, rightR, headY, isActive }) {
 
   const pathLines = (
     <>
-      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="#7a4420" strokeWidth="2" opacity="0.65" />
-      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="#7a4420" strokeWidth="2" opacity="0.65" />
-      <path d={`M ${guide1X} ${headY - 2} Q 400 ${headY + 8} ${guide2X} ${headY - 2}`} fill="none" stroke="#7a4420" strokeWidth="2" opacity="0.65" />
-      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="rgba(180,120,60,0.12)" strokeWidth="4" />
-      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="rgba(180,120,60,0.12)" strokeWidth="4" />
+      {/* Tape shadow / glow */}
+      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="rgba(120,70,30,0.25)" strokeWidth="8" strokeLinecap="round" />
+      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="rgba(120,70,30,0.25)" strokeWidth="8" strokeLinecap="round" />
+      <path d={`M ${guide1X} ${headY - 2} Q 400 ${headY + 8} ${guide2X} ${headY - 2}`} fill="none" stroke="rgba(120,70,30,0.25)" strokeWidth="8" strokeLinecap="round" />
+      {/* Main tape */}
+      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
+      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
+      <path d={`M ${guide1X} ${headY - 2} Q 400 ${headY + 8} ${guide2X} ${headY - 2}`} fill="none" stroke="#8a5020" strokeWidth="4" strokeLinecap="round" />
+      {/* Tape highlight */}
+      <line x1={LCX} y1={leftTangentY} x2={guide1X} y2={headY - 2} stroke="rgba(200,140,80,0.2)" strokeWidth="2" />
+      <line x1={RCX} y1={rightTangentY} x2={guide2X} y2={headY - 2} stroke="rgba(200,140,80,0.2)" strokeWidth="2" />
     </>
   );
 

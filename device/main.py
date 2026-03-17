@@ -7,6 +7,8 @@ memoir structuring, Pico 2 button handling, and the UI.
 from __future__ import annotations
 
 import asyncio
+import json as _json
+import time as _time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Optional, Set
@@ -23,6 +25,16 @@ from memoir_engine import process_transcript, generate_chapter_title, generate_f
 from pico_bridge import on_button, start_pico_listener, send_state
 from sync_client import periodic_sync
 import storage
+
+# #region agent log
+_DEBUG_LOG = "/Users/brettchiate/Desktop/ROOT FILES/LEGACY TAPE/.cursor/debug-62dbf4.log"
+def _dbg(msg, data=None, hyp="", loc="main.py"):
+    try:
+        with open(_DEBUG_LOG, "a") as f:
+            f.write(_json.dumps({"sessionId":"62dbf4","location":loc,"message":msg,"data":data or {},"hypothesisId":hyp,"timestamp":int(_time.time()*1000)}) + "\n")
+    except Exception:
+        pass
+# #endregion
 
 # ---------------------------------------------------------------------------
 # State
@@ -77,9 +89,19 @@ async def _monitor_playback() -> None:
 # ---------------------------------------------------------------------------
 
 async def _monitor_recording() -> None:
-    """Broadcast audio input level while recording so UI can show VU meter."""
+    """Broadcast audio input level while recording so UI can show VU meter.
+    Also monitors stream health and auto-stops on failure."""
     try:
         while recorder.is_recording:
+            if not recorder.stream_healthy:
+                logger.error("Audio stream failed — auto-stopping recording")
+                # #region agent log
+                _dbg("monitor detected stream failure, auto-stopping", {"stream_failed": recorder._stream_failed}, hyp="C", loc="main.py:_monitor_recording")
+                # #endregion
+                await handle_stop()
+                await broadcast({"type": "error", "action": "record", "message": "Audio device error — recording stopped"})
+                return
+
             level = recorder.get_level()
             elapsed = recorder.elapsed_seconds
             await broadcast({
@@ -89,6 +111,11 @@ async def _monitor_recording() -> None:
             })
             await asyncio.sleep(0.2)
     except asyncio.CancelledError:
+        pass
+    finally:
+        # #region agent log
+        _dbg("_monitor_recording exited", {"is_recording": recorder.is_recording}, hyp="D", loc="main.py:_monitor_recording")
+        # #endregion
         pass
 
 
@@ -135,6 +162,9 @@ async def _run_transcription(filepath: str, duration: float, chapter_id: str) ->
 
 async def handle_record() -> None:
     global current_story, current_chapter, _recording_monitor_task
+    # #region agent log
+    _dbg("handle_record() called", {"already_recording": recorder.is_recording}, hyp="A,B", loc="main.py:handle_record")
+    # #endregion
 
     if recorder.is_recording:
         logger.info("Already recording")
@@ -174,6 +204,10 @@ async def handle_record() -> None:
 
 async def handle_stop() -> None:
     global current_chapter, _playback_monitor_task, _recording_monitor_task, _transcription_task
+    # #region agent log
+    import traceback as _tb
+    _dbg("handle_stop() called", {"is_recording": recorder.is_recording, "is_playing": recorder.is_playing, "caller": "".join(_tb.format_stack()[-4:-1])}, hyp="B", loc="main.py:handle_stop")
+    # #endregion
 
     if recorder.is_playing:
         recorder.stop_playback()
@@ -287,6 +321,9 @@ async def handle_mode(value: str = None) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # #region agent log
+    _dbg("LIFESPAN START — server (re)starting", {"platform": settings.platform}, hyp="A", loc="main.py:lifespan")
+    # #endregion
     logger.info(f"Starting {settings.app_name}")
     logger.info(f"Data dir: {settings.data_dir}")
 
@@ -309,6 +346,9 @@ async def lifespan(app: FastAPI):
     yield
 
     recorder.stop_playback()
+    # #region agent log
+    _dbg("LIFESPAN SHUTDOWN — server stopping", {}, hyp="A", loc="main.py:lifespan")
+    # #endregion
     logger.info("Shutting down")
 
 
@@ -330,6 +370,9 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     ws_clients.add(ws)
     logger.info(f"UI connected ({len(ws_clients)} clients)")
+    # #region agent log
+    _dbg("WebSocket connected", {"total_clients": len(ws_clients)}, hyp="E", loc="main.py:websocket_endpoint")
+    # #endregion
 
     current_state = "idle"
     if recorder.is_recording:
@@ -379,6 +422,9 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         ws_clients.discard(ws)
         logger.info(f"UI disconnected ({len(ws_clients)} clients)")
+        # #region agent log
+        _dbg("WebSocket disconnected", {"remaining_clients": len(ws_clients)}, hyp="E", loc="main.py:websocket_endpoint")
+        # #endregion
 
 
 # ---------------------------------------------------------------------------
@@ -479,6 +525,6 @@ if __name__ == "__main__":
         "main:app",
         host=settings.host,
         port=settings.port,
-        reload=True,
+        reload=(settings.platform == "mac"),
         log_level="info",
     )

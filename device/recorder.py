@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 import threading
 import time
 from pathlib import Path
@@ -13,6 +14,16 @@ import soundfile as sf
 from loguru import logger
 
 from config import settings
+
+# #region agent log
+_DEBUG_LOG = "/Users/brettchiate/Desktop/ROOT FILES/LEGACY TAPE/.cursor/debug-62dbf4.log"
+def _dbg(msg, data=None, hyp="", loc="recorder.py"):
+    try:
+        with open(_DEBUG_LOG, "a") as f:
+            f.write(_json.dumps({"sessionId":"62dbf4","location":loc,"message":msg,"data":data or {},"hypothesisId":hyp,"timestamp":int(time.time()*1000)}) + "\n")
+    except Exception:
+        pass
+# #endregion
 
 
 def find_usb_mic() -> Optional[int]:
@@ -160,11 +171,26 @@ class Recorder:
             return self._pause_start - self._start_time - self._pause_offset
         return time.time() - self._start_time - self._pause_offset
 
+    @property
+    def stream_healthy(self) -> bool:
+        """True when the audio stream is open and hasn't encountered errors."""
+        if self._stream_failed:
+            return False
+        if self._stream is None:
+            return False
+        try:
+            return self._stream.active
+        except Exception:
+            return False
+
     def _audio_callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:
             logger.warning(f"Audio callback status: {status}")
             if "error" in str(status).lower():
                 self._stream_failed = True
+                # #region agent log
+                _dbg("audio_callback stream error", {"status": str(status)}, hyp="C", loc="recorder.py:_audio_callback")
+                # #endregion
                 return
         if self._recording and not self._paused:
             self._frames.append(indata.copy())
@@ -196,6 +222,9 @@ class Recorder:
                 dev_name = f"[{device}]"
 
         logger.info(f"Starting recording: device={dev_name}, rate={sample_rate}Hz, ch={settings.channels}")
+        # #region agent log
+        _dbg("recorder.start called", {"device": dev_name, "rate": sample_rate}, hyp="A,C", loc="recorder.py:start")
+        # #endregion
 
         try:
             self._stream = sd.InputStream(
@@ -208,9 +237,15 @@ class Recorder:
             )
             self._stream.start()
             logger.info(f"Recording stream opened successfully")
+            # #region agent log
+            _dbg("recorder.start stream opened OK", {"device": dev_name}, hyp="C", loc="recorder.py:start")
+            # #endregion
         except Exception as e:
             self._recording = False
             logger.error(f"Failed to start recording: {e}")
+            # #region agent log
+            _dbg("recorder.start FAILED", {"error": str(e)}, hyp="C", loc="recorder.py:start")
+            # #endregion
             raise
 
     def pause(self) -> None:
@@ -233,6 +268,10 @@ class Recorder:
             return None
 
         duration = self.elapsed_seconds
+        # #region agent log
+        import traceback as _tb
+        _dbg("recorder.stop called", {"elapsed": round(duration, 1), "frames": len(self._frames), "stream_failed": self._stream_failed, "caller": "".join(_tb.format_stack()[-4:-1])}, hyp="B", loc="recorder.py:stop")
+        # #endregion
 
         self._recording = False
         self._paused = False
